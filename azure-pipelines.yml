@@ -1,0 +1,68 @@
+trigger:
+- SCA-VP
+
+pool:
+  vmImage: windows-latest
+  
+stages:
+  - stage: Build
+    jobs:
+      - job: BuildJob
+        steps:
+          - checkout: Self
+          
+          - task: PowerShell@2
+            inputs:
+              targetType: 'inline'
+              script: |
+                $Config_path = "$(System.DefaultWorkingDirectory)/src/main/resources/application.properties"
+                $Contents = get-content $Config_path 
+                $ChangedValues = $Contents -replace "localhost", "dbsever"
+                $ChangedValues = $ChangedValues -replace "password", "mysqlpassword"
+                $ChangedValues = $ChangedValues -replace "newuser", "mysqluser"
+                $ChangedValues > $Config_path
+
+          - task: Maven@3
+            inputs:
+              mavenPomFile: 'pom.xml'
+              goals: 'install'
+              publishJUnitResults: true
+              testResultsFiles: '**/surefire-reports/TEST-*.xml'
+              javaHomeOption: 'JDKVersion'
+              mavenVersionOption: 'Default'
+              mavenAuthenticateFeed: false
+              effectivePomSkip: false
+              sonarQubeRunAnalysis: false
+              checkStyleRunAnalysis: true
+              pmdRunAnalysis: true
+              findBugsRunAnalysis: true
+          
+          - task: CmdLine@2
+            inputs:
+              script: 'cat $(System.DefaultWorkingDirectory)\src\main\resources\application.properties'
+
+          - task: CopyFiles@2
+            inputs:
+              SourceFolder: '$(System.DefaultWorkingDirectory)\target'
+              Contents: 'VProfile-1.0.war'
+              TargetFolder: '$(Build.ArtifactStagingDirectory)\drop'
+          
+          - task: CopyFiles@2
+            inputs:
+              SourceFolder: '$(System.DefaultWorkingDirectory)\src\main\resources'
+              Contents: 'application.properties'
+              TargetFolder: '$(Build.ArtifactStagingDirectory)\drop'
+          # - task: CopyFiles@2
+          #   inputs:
+          #     SourceFolder: '$(System.DefaultWorkingDirectory)'
+          #     Contents: 
+          #       \src\main\resources\application.properties
+          #       \target\VProfile-1.0.war
+          #     TargetFolder: '$(Build.ArtifactStagingDirectory)\drop'
+
+          - task: PublishBuildArtifacts@1
+            inputs:
+              PathtoPublish: '$(Build.ArtifactStagingDirectory)\drop'
+              ArtifactName: 'dropvprofile'
+              publishLocation: 'Container'
+          
